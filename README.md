@@ -116,14 +116,22 @@ actionable prompt ("assess and notify the user only if it matters").
 
 1. OpenClaw gateway — enable hooks in `~/.openclaw/openclaw.json`:
    `{ hooks: { enabled: true, token: "A_STRONG_SECRET", path: "/hooks" } }`
-2. Relay host (any always-on LAN machine; the gateway host is fine) — create
-   `~/.config/unifi/relay.json` with `openclaw_url`, `openclaw_token`, then run
-   `python3 scripts/webhook_relay.py` (see the script docstring; wrap it in
-   systemd/launchd to keep it running).
+2. Relay host (any always-on LAN machine; the gateway host is fine) — run the
+   guided setup, which prompts for the gateway URL and token, can send a live
+   test wake-up to verify them, writes `relay.json` (mode 600), and prints the
+   exact Alarm Manager settings for your network:
+
+   ```bash
+   python3 scripts/setup.py --relay
+   ```
+
+   Then start the relay and keep it running (systemd/launchd):
+   `python3 scripts/webhook_relay.py`
 3. UniFi console → Protect → **Alarm Manager** → create an alarm: choose
    cameras + detection types (person / vehicle / package / animal / license
    plate) → Action: **Webhook → Custom Webhook** → URL
    `http://<relay-host>:8666/unifi-alarm` → Advanced Settings → method **POST**.
+   (Step 2 prints this URL with the relay host's actual LAN IP filled in.)
 
 Make one alarm per behavior you care about ("Package Detected" on the doorbell,
 "Vehicle" on the driveway), and customize `prompt_template` in `relay.json` to

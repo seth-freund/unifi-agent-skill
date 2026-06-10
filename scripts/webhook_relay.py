@@ -75,8 +75,9 @@ def load_relay_config():
     cfg.setdefault("cooldown_sec", 90)
     cfg.setdefault("prompt_template", DEFAULT_PROMPT)
     if not cfg["openclaw_token"]:
-        sys.exit("Missing OpenClaw hooks token: set OPENCLAW_HOOK_TOKEN or "
-                 f"'openclaw_token' in {p}")
+        sys.exit(f"No relay config found at {p}.\n"
+                 "Run the guided setup first:  python3 setup.py --relay\n"
+                 "(or set OPENCLAW_HOOK_URL / OPENCLAW_HOOK_TOKEN env vars)")
     return cfg
 
 

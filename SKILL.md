@@ -47,7 +47,11 @@ Protect (`python3 {baseDir}/scripts/protect_cli.py ...`):
 Event-driven alerts (`python3 {baseDir}/scripts/webhook_relay.py`):
 - Daemon that turns Protect Alarm Manager webhooks into OpenClaw agent wake-ups
   (`/hooks/agent`), enriched with the camera name and a trigger-time snapshot.
-  Setup steps are in the script docstring and the repo README.
+- To set it up for the user: ask them for their OpenClaw hooks URL and token
+  (`hooks.token` in the gateway's openclaw.json — treat as a secret), then run
+  `python3 {baseDir}/scripts/setup.py --relay --openclaw-url <URL> --openclaw-token <TOKEN> --send-test`.
+  It validates the token with a test wake-up, writes relay.json, and prints the
+  exact Alarm Manager webhook settings — relay those instructions to the user.
 - If a wake-up message mentions a snapshot path, open and assess that image first,
   then decide whether the user needs to be notified.
 

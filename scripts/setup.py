@@ -11,6 +11,10 @@ Non-interactive (good for agents):
 Refresh inventory after network changes (uses saved config):
   python3 setup.py --refresh
 
+Set up the OpenClaw webhook relay (guided; see webhook_relay.py):
+  python3 setup.py --relay
+  python3 setup.py --relay --openclaw-url URL --openclaw-token TOKEN --send-test
+
 Writes to --config-dir (default ~/.config/unifi/):
   config.json     credentials (chmod 600)
   inventory.md    human/agent-readable summary of the whole system
@@ -24,6 +28,8 @@ import os
 import stat
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -131,6 +137,115 @@ def render_md(inv):
     return "\n".join(L)
 
 
+def lan_ip():
+    """Best-effort LAN IP of this machine, for the Alarm Manager URL hint."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.0.2.1", 80))   # no traffic actually sent (UDP)
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "<this-host>"
+
+
+def test_gateway(url, token, send_test):
+    """Validate the OpenClaw hooks endpoint + token. Returns True on success.
+    Without send_test we only validate the URL shape (a real POST would wake
+    the agent, which the user may not want during setup)."""
+    if not send_test:
+        return True
+    body = ({"text": "UniFi relay setup test — connection OK.", "mode": "now"}
+            if url.rstrip("/").endswith("/wake")
+            else {"message": "UniFi relay setup test — reply OK if you can see this.",
+                  "name": "UniFi relay setup"})
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            print(f"  ok  OpenClaw gateway answered HTTP {r.status} — "
+                  "your agent just received a test wake-up")
+            return True
+    except urllib.error.HTTPError as e:
+        print(f"  --  gateway rejected the request (HTTP {e.code})."
+              + (" Check the hooks token." if e.code in (401, 403) else ""))
+    except Exception as e:
+        print(f"  --  could not reach gateway: {e}")
+    return False
+
+
+def setup_relay(a):
+    """Guided setup for webhook_relay.py: prompt -> validate -> write relay.json
+    -> print the exact Alarm Manager settings. Re-runs are safe (edits in place)."""
+    path = a.config_dir / "relay.json"
+    existing = json.loads(path.read_text()) if path.is_file() else {}
+    tty = sys.stdin.isatty()
+
+    def ask(label, current, hidden=False):
+        if not tty:
+            return current
+        if hidden:
+            import getpass
+            v = getpass.getpass(f"{label} (input hidden){' [keep current]' if current else ''}: ")
+        else:
+            v = input(f"{label} [{current}]: ").strip()
+        return v or current
+
+    url = a.openclaw_url or existing.get("openclaw_url") or "http://127.0.0.1:18789/hooks/agent"
+    token = a.openclaw_token or existing.get("openclaw_token") or ""
+    port = a.relay_port or existing.get("listen_port") or 8666
+    cooldown = a.cooldown if a.cooldown is not None else existing.get("cooldown_sec", 90)
+
+    if tty:
+        print("Relay setup — connects UniFi Protect Alarm Manager to your OpenClaw agent.")
+        print("Defaults are in [brackets]; press Enter to accept.\n")
+        url = ask("OpenClaw hooks URL (use /hooks/agent to run the agent,\n"
+                  "  or /hooks/wake to just nudge the main session)", url)
+        token = ask("OpenClaw hooks token (from hooks.token in openclaw.json)",
+                    token, hidden=True)
+        port = int(ask("Relay listen port", port))
+        cooldown = int(ask("Cooldown seconds between repeat alerts per camera", cooldown))
+    if not token:
+        sys.exit("A hooks token is required: pass --openclaw-token, or set "
+                 "hooks.token in the gateway's openclaw.json and re-run.")
+
+    print("\nValidating...")
+    send_test = a.send_test or (tty and input(
+        "Send a test wake-up to your agent now to verify the token? [y/N]: ").lower() == "y")
+    gateway_ok = test_gateway(url, token, send_test)
+    if send_test and not gateway_ok:
+        sys.exit("Gateway validation failed — relay.json not written. "
+                 "Fix the URL/token and re-run setup.py --relay.")
+    try:
+        UnifiClient().cameras()
+        print("  ok  UniFi Protect reachable — camera names and snapshots will work")
+    except Exception as e:
+        print(f"  --  UniFi Protect not reachable ({e}); run plain setup.py first. "
+              "The relay will still start, but alerts will lack names/snapshots.")
+
+    cfg = {**existing, "listen_port": port, "openclaw_url": url,
+           "openclaw_token": token, "cooldown_sec": cooldown}
+    cfg.setdefault("snapshot_dir", "/tmp/unifi-alerts")
+    a.config_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)   # contains the hooks token
+    print(f"\nSaved -> {path} (mode 600)")
+
+    print(f"""
+Next steps:
+1. Start the relay (keep it running — systemd/launchd/nohup):
+     python3 {Path(__file__).resolve().parent / 'webhook_relay.py'}
+2. In the UniFi console -> Protect -> Alarm Manager, for each alert you want
+   (e.g. 'Package Detected' on the doorbell, 'Vehicle' on the driveway):
+     Action:   Webhook -> Custom Webhook
+     URL:      http://{lan_ip()}:{port}/unifi-alarm
+     Advanced: HTTP method POST
+3. Trigger a test (walk in front of a camera) and watch the relay output.""")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -141,7 +256,18 @@ def main():
     ap.add_argument("--config-dir", type=Path, default=DEFAULT_DIR)
     ap.add_argument("--refresh", action="store_true",
                     help="rebuild inventory using already-saved config")
+    ap.add_argument("--relay", action="store_true",
+                    help="set up webhook_relay.py (UniFi alarms -> OpenClaw agent)")
+    ap.add_argument("--openclaw-url", help="(--relay) OpenClaw hooks endpoint")
+    ap.add_argument("--openclaw-token", help="(--relay) OpenClaw hooks token")
+    ap.add_argument("--relay-port", type=int, help="(--relay) relay listen port")
+    ap.add_argument("--cooldown", type=int, help="(--relay) seconds between repeat alerts")
+    ap.add_argument("--send-test", action="store_true",
+                    help="(--relay) POST a test wake-up to verify the token")
     a = ap.parse_args()
+
+    if a.relay:
+        return setup_relay(a)
 
     cfg_path = a.config_dir / "config.json"
     if a.refresh:
