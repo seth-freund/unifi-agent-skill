@@ -30,8 +30,8 @@ live event watcher only).
 ### OpenClaw
 
 ```bash
-openclaw skills install git:OWNER/unifi-agent-skill   # active workspace
-openclaw skills install git:OWNER/unifi-agent-skill --global  # all agents
+openclaw skills install git:seth-freund/unifi-agent-skill   # active workspace
+openclaw skills install git:seth-freund/unifi-agent-skill --global  # all agents
 ```
 
 (Or clone into `~/.openclaw/skills/unifi` / `<workspace>/skills/unifi`.)
@@ -39,7 +39,7 @@ openclaw skills install git:OWNER/unifi-agent-skill --global  # all agents
 ### Claude Code
 
 ```bash
-git clone https://github.com/OWNER/unifi-agent-skill ~/.claude/skills/unifi
+git clone https://github.com/seth-freund/unifi-agent-skill ~/.claude/skills/unifi
 ```
 
 ### Anywhere else

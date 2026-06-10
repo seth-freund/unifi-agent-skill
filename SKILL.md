@@ -1,7 +1,7 @@
 ---
 name: unifi
 description: Manage a local UniFi system (Network + Protect) via Ubiquiti's official Integration APIs. Use for anything about the user's home/office network, WiFi, UniFi devices, switches, access points, network clients, who's online, device restarts, PoE ports, guest vouchers, security cameras, camera snapshots, doorbell, or smart detections (person/vehicle/package/animal). Can capture live camera snapshots as images for visual checks. Includes a setup command that discovers the user's system and builds an inventory.
-homepage: https://github.com/OWNER/unifi-agent-skill
+homepage: https://github.com/seth-freund/unifi-agent-skill
 metadata: {"openclaw": {"emoji": "📡", "requires": {"bins": ["python3"]}, "primaryEnv": "UNIFI_API_KEY"}}
 ---
 
