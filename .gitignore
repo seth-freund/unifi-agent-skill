@@ -1,0 +1,9 @@
+# Never commit credentials or discovered system details
+config.json
+inventory.md
+inventory.json
+*.jpg
+*.jpeg
+__pycache__/
+*.pyc
+.DS_Store
