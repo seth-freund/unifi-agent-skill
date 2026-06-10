@@ -44,6 +44,13 @@ Protect (`python3 {baseDir}/scripts/protect_cli.py ...`):
 - `sensors | lights | chimes | liveviews | nvr | viewers`
 - `watch [--types person,package]` — live smart-detect event stream (long-running websocket; needs `pip install websockets`)
 
+Event-driven alerts (`python3 {baseDir}/scripts/webhook_relay.py`):
+- Daemon that turns Protect Alarm Manager webhooks into OpenClaw agent wake-ups
+  (`/hooks/agent`), enriched with the camera name and a trigger-time snapshot.
+  Setup steps are in the script docstring and the repo README.
+- If a wake-up message mentions a snapshot path, open and assess that image first,
+  then decide whether the user needs to be notified.
+
 ## Conventions
 
 - Visual questions ("is there a car in the driveway?", "any packages on the porch?"):

@@ -94,6 +94,41 @@ These lines drop straight into a scheduled morning/evening briefing prompt
 The agent reads `~/.config/unifi/inventory.md` first, so it knows your camera
 names and what each one can detect.
 
+## Event-driven alerts (webhooks → wake the agent)
+
+Beyond briefings and Q&A, the skill can *wake your agent the moment something
+happens* — a package at the door, a car in the driveway — using UniFi Protect's
+Alarm Manager webhooks and `scripts/webhook_relay.py`:
+
+```
+Protect Alarm Manager ──POST──▶ webhook_relay.py ──POST──▶ OpenClaw /hooks/agent
+                                  (adds camera name,         (agent wakes, looks at
+                                   snapshot, auth header)      the snapshot, decides)
+```
+
+The relay exists because Alarm Manager's payload only identifies cameras by MAC
+and can't attach the Authorization header OpenClaw requires. The relay enriches
+each alert with the camera *name* and a trigger-time snapshot the agent can
+open, dedupes with a per-camera cooldown, then wakes the agent with an
+actionable prompt ("assess and notify the user only if it matters").
+
+**Setup:**
+
+1. OpenClaw gateway — enable hooks in `~/.openclaw/openclaw.json`:
+   `{ hooks: { enabled: true, token: "A_STRONG_SECRET", path: "/hooks" } }`
+2. Relay host (any always-on LAN machine; the gateway host is fine) — create
+   `~/.config/unifi/relay.json` with `openclaw_url`, `openclaw_token`, then run
+   `python3 scripts/webhook_relay.py` (see the script docstring; wrap it in
+   systemd/launchd to keep it running).
+3. UniFi console → Protect → **Alarm Manager** → create an alarm: choose
+   cameras + detection types (person / vehicle / package / animal / license
+   plate) → Action: **Webhook → Custom Webhook** → URL
+   `http://<relay-host>:8666/unifi-alarm` → Advanced Settings → method **POST**.
+
+Make one alarm per behavior you care about ("Package Detected" on the doorbell,
+"Vehicle" on the driveway), and customize `prompt_template` in `relay.json` to
+tell the agent exactly how to react. Keep the relay LAN-only.
+
 ## Security notes
 
 - The API key grants full read access to your cameras and network — treat it
